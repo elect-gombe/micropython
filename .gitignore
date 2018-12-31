@@ -8,7 +8,12 @@
 *.hex
 *.dis
 *.exe
-
+*.d
+*~
+GPATH
+GRTAGS
+GTAGS
+\#*
 # Packages
 ############
 
