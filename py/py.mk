@@ -17,7 +17,7 @@ endif
 QSTR_GLOBAL_DEPENDENCIES += $(PY_SRC)/mpconfig.h mpconfigport.h
 
 # some code is performance bottleneck and compiled with other optimization options
-CSUPEROPT = -O3
+# CSUPEROPT = -O3
 
 # this sets the config file for FatFs
 CFLAGS_MOD += -DFFCONF_H=\"lib/oofatfs/ffconf.h\"
@@ -315,7 +315,7 @@ $(HEADER_BUILD)/qstrdefs.generated.h: $(PY_QSTR_DEFS) $(QSTR_DEFS) $(QSTR_DEFS_C
 
 # Force nlr code to always be compiled with space-saving optimisation so
 # that the function preludes are of a minimal and predictable form.
-$(PY_BUILD)/nlr%.o: CFLAGS += -Os
+# $(PY_BUILD)/nlr%.o: CFLAGS += -Os
 
 # optimising gc for speed; 5ms down to 4ms on pybv2
 $(PY_BUILD)/gc.o: CFLAGS += $(CSUPEROPT)
