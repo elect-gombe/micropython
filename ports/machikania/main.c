@@ -11,6 +11,8 @@
 #include "ps2keyboard.h"
 #include <xc.h>
 #include "py/gc.h"
+#include "extmod/vfs.h"
+#include "extmod/vfs_fat.h"
 
 
 #pragma config FSRSSEL = PRIORITY_7
@@ -32,6 +34,8 @@
 #pragma config BWP = OFF
 #pragma config CP = OFF
 
+
+fs_user_mount_t fs_user_mount_flash;
 
 int mp_hal_ticks_ms(void){
   return drawcount*1000/60;
@@ -59,12 +63,8 @@ void wait60thsec(int n){
   }while(--n);
 }
 
-
-
-static char heap[100000];
+static char heap[0x1A800];
 int main(int argc, char **argv) {
-  void *stack;
-  MP_STATE_THREAD(stack_top) = (char*)&stack;
   /* ポートの初期設定 */
   CNPUB = 0xFFFF; // PORTB全てプルアップ(I/O)
   TRISB = 0xFFFF; // PORTB全て入力
@@ -92,13 +92,16 @@ int main(int argc, char **argv) {
   RPG8R = 6; //RPG8にSDO2を割り当て
 
   init_composite();
-  set_videomode(VMODE_MONOTEXT,NULL);
+  set_videomode(VMODE_WIDETEXT,NULL);
+  
+  // init the vfs object
 
   if(ps2init()){
     printstr("err while init ps2 keyboard\n");
   }
   /* printstr("micropython test\n"); */
   gc_init(heap, heap + sizeof(heap));
+
   /* printstr("gc\n"); */
   /* wait60thsec(60); */
   mp_init();
@@ -109,6 +112,49 @@ int main(int argc, char **argv) {
   /* do_str("for i in range(10):\n  print(i)", MP_PARSE_FILE_INPUT); */
   /* printf("exit success\n"); */
   readline_init0();
+
+    fs_user_mount_t *vfs_fat = &fs_user_mount_flash;
+  vfs_fat->flags = 0;
+  pyb_flash_init_vfs(vfs_fat);
+
+  // try to mount the flash
+  FRESULT res = f_mount(&vfs_fat->fatfs);
+  if(res){
+    printstr("initfaild\n");
+    printnum(res);
+    wait60thsec(60);
+  }
+  FILINFO fno;
+
+  res = f_stat(&vfs_fat->fatfs, "/test.py", &fno);
+  if(res){
+    printstr("file not found\n");
+    printnum(res);
+    wait60thsec(60);
+  }
+  
+
+  // mount the flash device (there should be no other devices mounted at this point)
+  // we allocate this structure on the heap because vfs->next is a root pointer
+  mp_vfs_mount_t *vfs = m_new_obj_maybe(mp_vfs_mount_t);
+  if (vfs == NULL) {
+    printstr("vfs failed");
+    while(1);
+  }
+  vfs->str = "/flash";
+  vfs->len = 6;
+  vfs->obj = MP_OBJ_FROM_PTR(vfs_fat);
+  vfs->next = NULL;
+  MP_STATE_VM(vfs_mount_table) = vfs;
+
+  // The current directory is used as the boot up directory.
+  // It is set to the internal flash filesystem by default.
+  MP_STATE_PORT(vfs_cur) = vfs;
+
+  mp_obj_list_init(mp_sys_path, 0);
+  mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
+  void *stack;
+  MP_STATE_THREAD(stack_top) = (char*)&stack;
 
   // REPL loop
   for (;;) {
@@ -221,8 +267,9 @@ void *gc_savereg(void **p);
 
 void gc_collect(void) {
   // TODO possibly need to trace registers
-  void *p[28],*s;
+  void *s,*p[30];
   s = gc_savereg(p);
+  mp_printf(&mp_plat_print,"gc info %p~%p\n",s,MP_STATE_THREAD(stack_top));
   gc_collect_start();
   // Node: stack is ascending
   gc_collect_root(s, ((mp_uint_t)MP_STATE_THREAD(stack_top)-(uint32_t)s) / sizeof(mp_uint_t));
@@ -246,18 +293,6 @@ void mp_hal_stdout_tx_strn_cooked(const char *str, size_t len) {
   mp_hal_stdout_tx_strn(str,len);
 }
 
-mp_lexer_t *mp_lexer_new_from_file(const char *filename) {
-  mp_raise_OSError(MP_ENOENT);
-}
-
-mp_import_stat_t mp_import_stat(const char *path) {
-  return MP_IMPORT_STAT_NO_EXIST;
-}
-
-mp_obj_t mp_builtin_open(size_t n_args, const mp_obj_t *args, mp_map_t *kwargs) {
-  return mp_const_none;
-}
-MP_DEFINE_CONST_FUN_OBJ_KW(mp_builtin_open_obj, 1, mp_builtin_open);
 
 void nlr_jump_fail(void *val) {
   printstr("jump failed\n");

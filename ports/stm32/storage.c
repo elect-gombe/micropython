@@ -264,6 +264,7 @@ STATIC const mp_rom_map_elem_t pyb_flash_locals_dict_table[] = {
 
 STATIC MP_DEFINE_CONST_DICT(pyb_flash_locals_dict, pyb_flash_locals_dict_table);
 
+
 const mp_obj_type_t pyb_flash_type = {
     { &mp_type_type },
     .name = MP_QSTR_Flash,

@@ -13,25 +13,30 @@ INC += -I$(TOP)
 INC += -I$(BUILD)
 CPU = 32MX370F512H
 
-CFLAGS_CORTEX_M4 = -MMD -g -mprocessor=$(CPU) -c -fsingle-precision-constant -Wdouble-promotion
-CFLAGS = $(INC) -Wall -std=gnu99 $(CFLAGS_CORTEX_M4) $(COPT) 
+CFLAGS_CORTEX_M4 = -MMD -g -mprocessor=$(CPU) -c -fsingle-precision-constant -Wdouble-promotion -mips16 
+CFLAGS = $(INC) -Wall -std=gnu99 $(CFLAGS_CORTEX_M4) $(COPT) $(CFLAGS_MOD) -g3  -fgnu89-inline
+#DEBUG = 1
+CFLAGS += -DMICROPY_FLOAT_IMPL=MICROPY_FLOAT_IMPL_FLOAT
 
 #Debugging/Optimization
 ifeq ($(DEBUG), 1)
-CFLAGS += -O0 -ggdb
+CFLAGS += -O0
 else
-CFLAGS += -O1 -DNDEBUG
+CFLAGS += -O1 -DNDEBUG 
 endif
 
-LDFLAGS =  -mprocessor=$(CPU) -Wl,--gc-sections,-Map=$@.map,--cref,--report-mem -T p32MX370F512H.ld
-LIBS = ps2keyboard370f.X.a -lm 
+LDFLAGS =  -mprocessor=$(CPU) -nostartfiles -Wl,--gc-sections,-Map=$@.map,--cref,--report-mem -T p32MX370F512H.ld
+LIBS = ps2keyboard370f.X.a -lm  /opt/microchip/xc32/v2.10/pic32mx/lib/libpic32.a
 
 SRC_LIB = $(addprefix lib/,\
 	libc/string0.c \
+	oofatfs/ff.c \
+	oofatfs/option/unicode.c \
 	mp-readline/readline.c \
 	netutils/netutils.c \
 	timeutils/timeutils.c \
 	utils/pyexec.c \
+	utils/sys_stdio_mphal.c\
 		)\
 	$(addprefix lib/libm/,\
 	math.c \
@@ -59,29 +64,45 @@ SRC_LIB = $(addprefix lib/,\
 	sf_tan.c \
 	wf_lgamma.c \
 	wf_tgamma.c \
-	)
+	)\
+	extmod/vfs_reader.c
 
 SRC_C = \
 	main.c \
 	lib_video_megalopa.c\
 	text_graph_library.c\
-
+	flash.c\
+	NVMem.c\
+	modpyb.c\
+	moduos.c
 #	printf.c \
 	string0.c \
 	malloc0.c \
 	gccollect.c \
 
+# List of sources for qstr extraction
+SRC_QSTR += $(SRC_C) $(SRC_MOD) $(SRC_LIB) $(EXTMOD_SRC_C)
 
 SRC_S = \
 	gc.s 
 
-OBJ = $(PY_CORE_O) $(addprefix $(BUILD)/, $(SRC_LIB:.c=.o) $(SRC_C:.c=.o) $(SRC_S:.s=.o))
+OBJ = $(PY_O) $(addprefix $(BUILD)/, $(SRC_LIB:.c=.o) $(SRC_C:.c=.o) $(SRC_S:.s=.o)) \
+crt0_mips32r2.o\
+crti_mips32r2.o\
+crtn_mips32r2.o
+
+OBJ += $(addprefix $(BUILD)/, $(EXTMOD_SRC_C:.c=.o))
+
 
 all: $(BUILD)/firmware.elf
-LD = xc32-gcc
+LD = $(CC)
+
+
+
 $(BUILD)/firmware.elf: $(OBJ)
 	$(ECHO) "LINK $@"
-	$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
+	$(CROSS_COMPILE)gcc $(LDFLAGS) -o $@ $^ $(LIBS)
+	xc32-objdump build/firmware.elf -S > build/a.disa
 	xc32-bin2hex $@
 	$(Q)$(SIZE) $@
 

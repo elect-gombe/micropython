@@ -36,5 +36,5 @@ gc_savereg: .globl gc_savereg
         # Skip $29 - SP
         sw      $30, (26*4) ($a0)
 
-	move	$v0,	$sp
 	jr	$ra
+	move	$v0,	$sp

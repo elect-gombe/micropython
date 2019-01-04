@@ -3,6 +3,7 @@
 
 #include "lib_video_megalopa.h"
 #include <ctype.h>
+#include "py/obj.h"
 
 
 const unsigned char __attribute__((__weak__ , aligned (4))) FontData[256*8]={
@@ -1268,3 +1269,31 @@ void stopPCG(void){
 // RAMフォント（PCG）の利用停止
 	Fontp=fontdata;
 }
+
+STATIC mp_obj_t vtxt_color(mp_obj_t cl_in) {
+    mp_int_t cl = mp_obj_get_int(cl_in);
+    setcursorcolor(cl);
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(vtxt_color_obj, vtxt_color);
+
+//todo heap must be in stack, or collected as gabage.
+STATIC mp_obj_t vtxt_mode(mp_obj_t mode_in) {
+    mp_int_t m = mp_obj_get_int(mode_in);
+    set_videomode(m,NULL);
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(vtxt_mode_obj, vtxt_mode);
+
+STATIC const mp_rom_map_elem_t vtxt_module_globals_table[] = {
+    { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_vtxt) },
+    { MP_ROM_QSTR(MP_QSTR_color), MP_ROM_PTR(&vtxt_color_obj) },
+    { MP_ROM_QSTR(MP_QSTR_mode), MP_ROM_PTR(&vtxt_mode_obj) },
+};
+
+STATIC MP_DEFINE_CONST_DICT(vtxt_module_globals, vtxt_module_globals_table);
+
+const mp_obj_module_t vtxt_module = {
+    .base = { &mp_type_module },
+    .globals = (mp_obj_dict_t*)&vtxt_module_globals,
+};

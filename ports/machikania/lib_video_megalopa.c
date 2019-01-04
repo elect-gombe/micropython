@@ -17,6 +17,8 @@
 
 
 #include "lib_video_megalopa.h"
+#define _SUPPRESS_PLIB_WARNING
+#include <plib.h>
 
 //カラー信号出力データ
 //
@@ -79,9 +81,10 @@ int attroffset; // TVRAMのカラー情報エリア位置
 int gwidth,gwidthy; // グラフィックX方向解像度
 
 //カラー信号波形テーブル
-//256色分のカラーパレット
+//16色分のカラーパレット
 //20分の3周期単位で3周期分、ただし計算の都合上1色32バイトとする
-unsigned char ClTable[32*256] __attribute__ ((aligned (4)));
+unsigned char _ClTable[32*16] __attribute__ ((aligned (4)));
+unsigned char *ClTable = _ClTable;
 
 //バックグランドカラーテーブル
 unsigned char BGClTable[20];
@@ -504,7 +507,7 @@ __asm__ volatile("label2_2:");
 	__asm__ volatile("beqz	$t1,label3");
 	__asm__ volatile("nop");
 
-nop();nop();nop();
+nop();nop();
 	// ウェイト
 	__asm__ volatile("addiu	$a1,$zero,117");
 __asm__ volatile("waitloop1:");
@@ -524,13 +527,17 @@ __asm__ volatile("waitloop1:");
 
 	nop();nop();nop();nop();//プリフェッチの影響排除用
 	nop();nop();nop();nop();
-	nop();nop();nop();// 16 align 調整用
+	nop();nop();nop();nop();
+	nop();nop();// 16 align 調整用
 //----------------------------------------------------------------------
 //　288x216標準グラフィック+テキストモード
 //----------------------------------------------------------------------
 l_stdgmode:
 	//	a1=ClTable;
-	__asm__ volatile("la	$a1,%0"::"i"(ClTable));
+	#warning todo!
+	//	__asm__ volatile("la	$a1,%0"::"i"(_ClTable));
+	__asm__ volatile("lw	$a1,%gp_rel(ClTable)($gp)");nop();
+	//	__asm__ volatile("lw	$a1,%%gp_rel(ClTable)($gp)":"=r"(ClTable));
 	//	a2=&LATE;
 	__asm__ volatile("la	$a2,%0"::"i"(&LATE));
 
@@ -1358,7 +1365,7 @@ __asm__ volatile("stdgmodeloop:");
 l_stdtextmode:
 	nop();
 	//	a1=ClTable;
-	__asm__ volatile("la	$a1,%0"::"i"(ClTable));
+	__asm__ volatile("lw	$a1,%gp_rel(ClTable)($gp)");nop();
 
 	//	a2=&LATE;
 	__asm__ volatile("la	$a2,%0"::"i"(&LATE));
@@ -2183,7 +2190,7 @@ l_widegmode:
 	__asm__ volatile("addiu	$t6,$zero,9"); //loop counter
 
 	//	a1=ClTable;
-	__asm__ volatile("la	$a1,%0"::"i"(ClTable));
+	__asm__ volatile("lw	$a1,%gp_rel(ClTable)($gp)");nop();
 	//	a2=&LATE;
 	__asm__ volatile("la	$a2,%0"::"i"(&LATE));
 
@@ -3008,7 +3015,7 @@ __asm__ volatile("nop");
 l_widetextmode:
 nop();nop();
 	//	a1=ClTable;
-	__asm__ volatile("la	$a1,%0"::"i"(ClTable));
+ __asm__ volatile("lw	$a1,%gp_rel(ClTable)($gp)");nop();
 
 	//	a2=&LATE;
 	__asm__ volatile("la	$a2,%0"::"i"(&LATE));
@@ -3839,7 +3846,7 @@ __asm__ volatile("widetextmodeloop:");
 l_wide6dottextmode:
 nop();nop();
 	//	a1=ClTable;
-	__asm__ volatile("la	$a1,%0"::"i"(ClTable));
+ __asm__ volatile("lw	$a1,%gp_rel(ClTable)($gp)");nop();
 
 	//	a2=&LATE;
 	__asm__ volatile("la	$a2,%0"::"i"(&LATE));
@@ -4919,7 +4926,7 @@ __asm__ volatile("zoeagmodewaitloop1:");
 	__asm__ volatile("bnez	$a1,zoeagmodewaitloop1");
 
 	//	a1=ClTable;
-	__asm__ volatile("la	$a1,%0"::"i"(ClTable));
+__asm__ volatile("lw	$a1,%gp_rel(ClTable)($gp)");nop();
 
 	//	a2=&LATE;
 	__asm__ volatile("la	$a2,%0"::"i"(&LATE));
@@ -5541,7 +5548,7 @@ __asm__ volatile("width30waitloop1:");
 	nop();nop();
 
 	//	a1=ClTable;
-	__asm__ volatile("la	$a1,%0"::"i"(ClTable));
+	__asm__ volatile("lw	$a1,%gp_rel(ClTable)($gp)");nop();
 
 	//	a2=&LATE;
 	__asm__ volatile("la	$a2,%0"::"i"(&LATE));
@@ -6242,8 +6249,10 @@ __asm__ volatile("width40waitloop1:");
 	nop();nop();
 
 	//	a1=ClTable;
-	__asm__ volatile("la	$a1,%0"::"i"(ClTable));
-
+	//__asm__ volatile("la	$a1,%0"::"i"(_ClTable));
+	__asm__ volatile("lw	$a1,%gp_rel(ClTable)($gp)");
+	nop();
+	
 	//	a2=&LATE;
 	__asm__ volatile("la	$a2,%0"::"i"(&LATE));
 
@@ -7360,9 +7369,6 @@ void init_palette(void){
 	for(i=0;i<8;i++){
 		set_palette(i+8,128*(i&1),128*((i>>1)&1),128*(i>>2));
 	}
-	for(i=16;i<256;i++){
-		set_palette(i,255,255,255);
-	}
 }
 void start_composite(void)
 {
@@ -7386,97 +7392,164 @@ void stop_composite(void)
 // カラーコンポジット出力初期化
 void init_composite(void)
 {
-	unsigned int *fontROMp,*fontRAMp;
-	unsigned int i;
+         unsigned int *fontROMp,*fontRAMp;
+         unsigned int i;
+ 
+         videomode=VMODE_STDTEXT;
+         textmode=TMODE_STDTEXT;
+         graphmode=GMODE_NOGRPH;
+         twidth=WIDTH_X;
+         twidthy=WIDTH_Y;
+         attroffset=ATTROFFSET;
+         clearscreen();
+ 
+         //カラーパレット初期化
+         init_palette();
+         set_bgcolor(0,0,0); //バックグランドカラーは黒
+         setcursorcolor(7);
+ 
+         //フォント初期化　FontData[]からfontdata[]にコピー
+         fontROMp=(unsigned int *)FontData;
+         fontRAMp=(unsigned int *)fontdata;
+         for(i=0;i<256*8/4;i++) *fontRAMp++=*fontROMp++;
+         Fontp=fontdata;
+ 
+         // タイマ2の初期設定,内部クロックで63.5usec周期、1:1
+         T2CON = 0x0000;                         // タイマ2停止状態
+         mT2SetIntPriority(5);                   // 割り込みレベル5
+         mT2ClearIntFlag();
+         mT2IntEnable(1);                        // タイマ2割り込み有効化
+ 
+         // OC1の割り込み有効化
+         mOC1SetIntPriority(5);                  // 割り込みレベル5
+         mOC1ClearIntFlag();
+         mOC1IntEnable(1);                       // OC1割り込み有効化
+ 
+         // OC2の割り込み有効化
+         mOC2SetIntPriority(5);                  // 割り込みレベル5
+         mOC2ClearIntFlag();
+         mOC2IntEnable(1);                       // OC2割り込み有効化
+ 
+         // OC5の割り込み有効化
+         mOC5SetIntPriority(5);                  // 割り込みレベル5
+         mOC5ClearIntFlag();
+         mOC5IntEnable(1);                       // OC5割り込み有効化
+ 
+         OSCCONCLR=0x10; // WAIT命令はアイドルモード
+ 
+         // Data Memory SRAM wait states: Default Setting = 1; set it to 0
+         BMXCONbits.BMXWSDRM = 0; // SRAMのウェイトステートを0にする
+ 
+         // Flash PM Wait States: MX Flash runs at 3 wait states @ 100 MHz
+         CHECONbits.PFMWS = 2; // フラッシュのウェイトステートを2にする（100MHz動作時）
+ 
+         // Prefetch-cache: Enable prefetch for cacheable PFM instructions
+         CHECONbits.PREFEN = 1; //プリフェッチ有効化
+ 
+         __builtin_mtc0(16, 0, (__builtin_mfc0(16, 0) & 0xfffffff8) | 3); // キャッシュ有効化
+ 
+         // Set the interrupt controller for multi-vector mode
+         INTCONSET = _INTCON_MVEC_MASK; //割り込みをマルチベクタモードに設定
+ 
+         // Set the CP0 Status IE bit to turn on interrupts globally
+         __builtin_enable_interrupts(); //割り込み有効化
+ 
+         LineCount=0;                            // 処理中ラインカウンター
+         PR2 = H_NTSC -1;                        // 約63.5usecに設定
+         T2CONSET=0x8000;                        // タイマ2スタート
+         start_composite();
+	 
+	/*  unsigned int *fontROMp,*fontRAMp; */
+	/* unsigned int i; */
 
-	videomode=VMODE_STDTEXT;
-	textmode=TMODE_STDTEXT;
-	graphmode=GMODE_NOGRPH;
-	twidth=WIDTH_X;
-	twidthy=WIDTH_Y;
-	attroffset=ATTROFFSET;
-	clearscreen();
+	/* videomode=VMODE_STDTEXT; */
+	/* textmode=TMODE_STDTEXT; */
+	/* graphmode=GMODE_NOGRPH; */
+	/* twidth=WIDTH_X; */
+	/* twidthy=WIDTH_Y; */
+	/* attroffset=ATTROFFSET; */
+	/* clearscreen(); */
 
-	//カラーパレット初期化
-	init_palette();
-	set_bgcolor(0,0,0); //バックグランドカラーは黒
-	setcursorcolor(7);
+	/* //カラーパレット初期化 */
+	/* init_palette(); */
+	/* set_bgcolor(0,0,0); //バックグランドカラーは黒 */
+	/* setcursorcolor(7); */
 
-	//フォント初期化　FontData[]からfontdata[]にコピー
-	fontROMp=(unsigned int *)FontData;
-	fontRAMp=(unsigned int *)fontdata;
-	for(i=0;i<256*8/4;i++) *fontRAMp++=*fontROMp++;
-	Fontp=fontdata;
+	/* //フォント初期化　FontData[]からfontdata[]にコピー */
+	/* fontROMp=(unsigned int *)FontData; */
+	/* fontRAMp=(unsigned int *)fontdata; */
+	/* for(i=0;i<256*8/4;i++) *fontRAMp++=*fontROMp++; */
+	/* Fontp=fontdata; */
 
-	// タイマ2の初期設定,内部クロックで63.5usec周期、1:1
-	T2CON = 0x0000;				// タイマ2停止状態
-	IFS0CLR = _IFS0_T2IF_MASK;
-	IPC2CLR = _IPC2_T2IP_MASK;
-	IPC2SET = 5<<_IPC2_T2IP_POSITION;
-	//	mT2SetIntPriority(5);			// 割り込みレベル5
-	//	mT2ClearIntFlag();
-	IEC0SET = _IEC0_T2IE_MASK;
-	//	mT2IntEnable(1);			// タイマ2割り込み有効化
+	/* // タイマ2の初期設定,内部クロックで63.5usec周期、1:1 */
+	/* T2CON = 0x0000;				// タイマ2停止状態 */
+	/* IFS0CLR = _IFS0_T2IF_MASK; */
+	/* IPC2CLR = _IPC2_T2IP_MASK; */
+	/* IPC2SET = 5<<_IPC2_T2IP_POSITION; */
+	/* //	mT2SetIntPriority(5);			// 割り込みレベル5 */
+	/* //	mT2ClearIntFlag(); */
+	/* IEC0SET = _IEC0_T2IE_MASK; */
+	/* //	mT2IntEnable(1);			// タイマ2割り込み有効化 */
 
-	// OC1の割り込み有効化
-	IFS0CLR=_IEC0_OC1IE_MASK;//mOC1SetIntPriority(5);			// 割り込みレベル5
+	/* // OC1の割り込み有効化 */
+	/* IFS0CLR=_IEC0_OC1IE_MASK;//mOC1SetIntPriority(5);			// 割り込みレベル5 */
 
-	IPC1CLR = _IPC1_OC1IS_MASK;
-	IPC1SET = 5<<_IPC1_OC1IS_POSITION;
+	/* IPC1CLR = _IPC1_OC1IS_MASK; */
+	/* IPC1SET = 5<<_IPC1_OC1IS_POSITION; */
 
-	IEC0SET = _IEC0_OC1IE_MASK;
+	/* IEC0SET = _IEC0_OC1IE_MASK; */
 	
-	/* mOC1ClearIntFlag(); */
-	/* mOC1IntEnable(1);			// OC1割り込み有効化 */
+	/* /\* mOC1ClearIntFlag(); *\/ */
+	/* /\* mOC1IntEnable(1);			// OC1割り込み有効化 *\/ */
 
 
-	// OC2の割り込み有効化
-	IFS0CLR=_IEC0_OC2IE_MASK;//mOC1SetIntPriority(5);			// 割り込みレベル5
+	/* // OC2の割り込み有効化 */
+	/* IFS0CLR=_IEC0_OC2IE_MASK;//mOC1SetIntPriority(5);			// 割り込みレベル5 */
 
-	IPC2CLR = _IPC2_OC2IS_MASK;
-	IPC2SET = 5<<_IPC2_OC2IS_POSITION;
+	/* IPC2CLR = _IPC2_OC2IS_MASK; */
+	/* IPC2SET = 5<<_IPC2_OC2IS_POSITION; */
 
-	IEC0SET = _IEC0_OC2IE_MASK;
+	/* IEC0SET = _IEC0_OC2IE_MASK; */
 	
-	/* mOC2SetIntPriority(5);			// 割り込みレベル5 */
-	/* mOC2ClearIntFlag(); */
-	/* mOC2IntEnable(1);			// OC2割り込み有効化 */
+	/* /\* mOC2SetIntPriority(5);			// 割り込みレベル5 *\/ */
+	/* /\* mOC2ClearIntFlag(); *\/ */
+	/* /\* mOC2IntEnable(1);			// OC2割り込み有効化 *\/ */
 
-	// OC5の割り込み有効化
-	IFS0CLR=_IEC0_OC5IE_MASK;//mOC1SetIntPriority(5);			// 割り込みレベル5
+	/* // OC5の割り込み有効化 */
+	/* IFS0CLR=_IEC0_OC5IE_MASK;//mOC1SetIntPriority(5);			// 割り込みレベル5 */
 
-	IPC5CLR = _IPC5_OC5IS_MASK;
-	IPC5SET = 5<<_IPC5_OC5IS_POSITION;
+	/* IPC5CLR = _IPC5_OC5IS_MASK; */
+	/* IPC5SET = 5<<_IPC5_OC5IS_POSITION; */
 
-	IEC0SET = _IEC0_OC5IE_MASK;
+	/* IEC0SET = _IEC0_OC5IE_MASK; */
 	
-	/* mOC5SetIntPriority(5);			// 割り込みレベル5 */
-	/* mOC5ClearIntFlag(); */
-	/* mOC5IntEnable(1);			// OC5割り込み有効化 */
+	/* /\* mOC5SetIntPriority(5);			// 割り込みレベル5 *\/ */
+	/* /\* mOC5ClearIntFlag(); *\/ */
+	/* /\* mOC5IntEnable(1);			// OC5割り込み有効化 *\/ */
 
-	OSCCONCLR=0x10; // WAIT命令はアイドルモード
+	/* OSCCONCLR=0x10; // WAIT命令はアイドルモード */
 
-	// Data Memory SRAM wait states: Default Setting = 1; set it to 0
-	BMXCONbits.BMXWSDRM = 0; // SRAMのウェイトステートを0にする
+	/* // Data Memory SRAM wait states: Default Setting = 1; set it to 0 */
+	/* BMXCONbits.BMXWSDRM = 0; // SRAMのウェイトステートを0にする */
 
-	// Flash PM Wait States: MX Flash runs at 3 wait states @ 100 MHz
-	CHECONbits.PFMWS = 2; // フラッシュのウェイトステートを2にする（100MHz動作時）
+	/* // Flash PM Wait States: MX Flash runs at 3 wait states @ 100 MHz */
+	/* CHECONbits.PFMWS = 2; // フラッシュのウェイトステートを2にする（100MHz動作時） */
 
-	// Prefetch-cache: Enable prefetch for cacheable PFM instructions
-	CHECONbits.PREFEN = 1; //プリフェッチ有効化
+	/* // Prefetch-cache: Enable prefetch for cacheable PFM instructions */
+	/* CHECONbits.PREFEN = 1; //プリフェッチ有効化 */
 
-	__builtin_mtc0(16, 0, ((__builtin_mfc0(16, 0) & 0xfffffff8) | 3)); // キャッシュ有効化
+	/* __builtin_mtc0(16, 0, ((__builtin_mfc0(16, 0) & 0xfffffff8) | 3)); // キャッシュ有効化 */
 
-	// Set the interrupt controller for multi-vector mode
-	INTCONSET = _INTCON_MVEC_MASK; //割り込みをマルチベクタモードに設定
+	/* // Set the interrupt controller for multi-vector mode */
+	/* INTCONSET = _INTCON_MVEC_MASK; //割り込みをマルチベクタモードに設定 */
 
-	// Set the CP0 Status IE bit to turn on interrupts globally
-	__builtin_enable_interrupts(); //割り込み有効化
+	/* // Set the CP0 Status IE bit to turn on interrupts globally */
+	/* __builtin_enable_interrupts(); //割り込み有効化 */
 
-	LineCount=0;				// 処理中ラインカウンター
-	PR2 = H_NTSC -1; 			// 約63.5usecに設定
-	T2CONSET=0x8000;			// タイマ2スタート
-	start_composite();
+	/* LineCount=0;				// 処理中ラインカウンター */
+	/* PR2 = H_NTSC -1; 			// 約63.5usecに設定 */
+	/* T2CONSET=0x8000;			// タイマ2スタート */
+	/* start_composite(); */
 }
 
 //ビデオモードの切り替え
