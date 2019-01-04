@@ -26,7 +26,7 @@ CFLAGS += -O1 -DNDEBUG
 endif
 
 LDFLAGS =  -mprocessor=$(CPU) -nostartfiles -Wl,--gc-sections,-Map=$@.map,--cref,--report-mem -T p32MX370F512H.ld
-LIBS = ps2keyboard370f.X.a -lm  /opt/microchip/xc32/v2.10/pic32mx/lib/libpic32.a
+LIBS = -lm  /opt/microchip/xc32/v2.10/pic32mx/lib/libpic32.a
 
 SRC_LIB = $(addprefix lib/,\
 	libc/string0.c \
@@ -37,6 +37,7 @@ SRC_LIB = $(addprefix lib/,\
 	timeutils/timeutils.c \
 	utils/pyexec.c \
 	utils/sys_stdio_mphal.c\
+	utils/interrupt_char.c\
 		)\
 	$(addprefix lib/libm/,\
 	math.c \
@@ -74,7 +75,8 @@ SRC_C = \
 	flash.c\
 	NVMem.c\
 	modpyb.c\
-	moduos.c
+	moduos.c\
+	ps2keyboard.c
 #	printf.c \
 	string0.c \
 	malloc0.c \

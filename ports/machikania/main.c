@@ -13,6 +13,8 @@
 #include "py/gc.h"
 #include "extmod/vfs.h"
 #include "extmod/vfs_fat.h"
+#include <ctype.h>
+
 
 
 #pragma config FSRSSEL = PRIORITY_7
@@ -65,6 +67,8 @@ void wait60thsec(int n){
 
 static char heap[0x1A800];
 int main(int argc, char **argv) {
+  void *stack;
+  MP_STATE_THREAD(stack_top) = (char*)&stack;
   /* ポートの初期設定 */
   CNPUB = 0xFFFF; // PORTB全てプルアップ(I/O)
   TRISB = 0xFFFF; // PORTB全て入力
@@ -153,8 +157,6 @@ int main(int argc, char **argv) {
 
   mp_obj_list_init(mp_sys_path, 0);
   mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
-  void *stack;
-  MP_STATE_THREAD(stack_top) = (char*)&stack;
 
   // REPL loop
   for (;;) {
@@ -211,6 +213,7 @@ void blinkcursorchar(){
 }
 
 
+
 int mp_hal_stdin_rx_chr(void) {
   static char pc[6];
   int i;
@@ -228,8 +231,18 @@ int mp_hal_stdin_rx_chr(void) {
     wait60thsec(1);
     blinkcursorchar();
     c = (char)ps2readkey();
+    if(vkey& 0x0200){//Ctrl
+      if('A'<=(vkey&0xFF)&&(vkey&0xFF)<='Z'){
+	c= (vkey&0xFF)-'A'+1;
+	break;
+      }
+    }
     if(!c&&vkey&0xFF){
       switch(vkey&0xFF){
+      case VK_DELETE:
+	//	snprintf(pc,sizeof(pc),"[3~");
+	c='\x04';
+	break;
       case VK_RETURN:
       case VK_SEPARATOR:
 	c =  '\r';
@@ -269,7 +282,7 @@ void gc_collect(void) {
   // TODO possibly need to trace registers
   void *s,*p[30];
   s = gc_savereg(p);
-  mp_printf(&mp_plat_print,"gc info %p~%p\n",s,MP_STATE_THREAD(stack_top));
+  /* mp_printf(&mp_plat_print,"gc info %p~%p\n",s,MP_STATE_THREAD(stack_top)); */
   gc_collect_start();
   // Node: stack is ascending
   gc_collect_root(s, ((mp_uint_t)MP_STATE_THREAD(stack_top)-(uint32_t)s) / sizeof(mp_uint_t));
